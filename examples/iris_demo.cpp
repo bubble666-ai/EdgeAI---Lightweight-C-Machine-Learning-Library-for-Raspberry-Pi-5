@@ -11,6 +11,8 @@
 #include <fstream>
 #include <memory>
 
+using namespace edge_ai;
+
 class IrisDatasetDemo {
 public:
     IrisDatasetDemo() {}
@@ -71,8 +73,7 @@ public:
         std::vector<std::string> model_names = {
             "Logistic Regression",
             "Decision Tree",
-            "k-Nearest Neighbors",
-            "CNN"
+            "k-Nearest Neighbors"
         };
 
         std::vector<std::unique_ptr<edge_ai::BaseModel>> models;
@@ -81,15 +82,6 @@ public:
         models.push_back(ModelFactory::create_decision_tree(5, 2));
         models.push_back(ModelFactory::create_knn(5, 4));
 
-        edge_ai::Dataset cnn_data;
-        cnn_data.X = iris_data.X;
-        cnn_data.y = iris_data.y;
-        cnn_data.num_samples = iris_data.num_samples;
-        cnn_data.num_features = iris_data.num_features;
-
-        auto cnn_model = ModelFactory::create_cnn();
-        cnn_model->train(cnn_data);
-        models.push_back(std::move(cnn_model));
 
         std::cout << "=== Iris Dataset Classification Demo ===" << std::endl;
         std::cout << "Training and testing various ML algorithms..." << std::endl << std::endl;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EdgeAI CXX17)
+project(EdgeAI CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,7 +8,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    # Raspberry Pi 5 (ARM Cortex-A76) tuning; harmless no-op elsewhere.
     add_compile_options(-march=armv8-a+crc -mtune=cortex-a76)
     add_link_options(-march=armv8-a+crc -mtune=cortex-a76)
 endif()
@@ -33,9 +34,14 @@ target_include_directories(edge_ai PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-# Face Lock Example
-add_executable(face_lock examples/face_lock.cpp)
-target_link_libraries(face_lock edge_ai -lwiringPi)
+# Face Lock Example (Raspberry Pi only — requires wiringPi)
+find_library(WIRINGPI_LIBRARY wiringPi)
+if(WIRINGPI_LIBRARY)
+    add_executable(face_lock examples/face_lock.cpp)
+    target_link_libraries(face_lock edge_ai ${WIRINGPI_LIBRARY})
+else()
+    message(STATUS "wiringPi not found — skipping face_lock example")
+endif()
 
 # Iris Demo Example
 add_executable(iris_demo examples/iris_demo.cpp)
@@ -70,7 +76,7 @@ install(DIRECTORY src/include/ DESTINATION include)
 install(FILES README.md DESTINATION .)
 
 # Examples
-install(TARGETS face_lock iris_demo
+install(TARGETS iris_demo
     RUNTIME DESTINATION bin/examples
 )
 

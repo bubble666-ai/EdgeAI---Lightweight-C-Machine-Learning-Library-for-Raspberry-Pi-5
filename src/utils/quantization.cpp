@@ -69,7 +69,7 @@ int8_t Quantizer::float_to_int8(float value, float scale, int zero_point) {
         return static_cast<int8_t>(zero_point);
     }
 
-    float qvalue = value * scale + zero_point;
+    float qvalue = value / scale + zero_point;
     qvalue = std::max(-128.0f, std::min(127.0f, qvalue));
     return static_cast<int8_t>(std::round(qvalue));
 }
@@ -78,7 +78,7 @@ float Quantizer::int8_to_float(int8_t value, float scale, int zero_point) {
     if (scale == 0.0f) {
         return 0.0f;
     }
-    return (static_cast<float>(value) - zero_point) / scale;
+    return (static_cast<float>(value) - zero_point) * scale;
 }
 
 void Quantizer::prune_weights(std::vector<float>& weights, float threshold) {

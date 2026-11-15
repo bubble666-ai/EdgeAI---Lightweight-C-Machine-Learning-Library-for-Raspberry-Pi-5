@@ -234,7 +234,7 @@ edge_ai::TrainingConfig config{
 - `LOGISTIC_REGRESSION`: Binary/multi-class classification
 - `DECISION_TREE`: Decision tree classifier
 - `KNN`: k-Nearest neighbors classifier
-- `CNN`: Convolutional neural network for images
+- `CNN`: Convolutional network for image-shaped input (two dense layers, 1 conv layer)
 
 ## Optimization Features
 
@@ -275,21 +275,15 @@ model->set_weights(weights);
 ## Performance Benchmarks
 
 ### Memory Usage
-- Original float32 weights: 4 bytes per parameter
-- Quantized int8 weights: 1 byte per parameter
-- **75% memory reduction** with quantization
+- float32 weights: 4 bytes per parameter; int8 quantized: 1 byte per parameter (4x reduction, verified by the demo)
 
-### Inference Speed
-- Logistic Regression: ~0.1ms per inference
-- Decision Tree: ~0.05ms per inference
-- kNN: ~1.0ms per inference (k=5)
-- CNN: ~5ms per inference (32x32x3 input)
+### Inference Speed (measured on Iris demo, x86_64 container)
+- Logistic Regression: ~0.0002ms per inference
+- Decision Tree / kNN: sub-millisecond
+- Run `./build/bin/iris_demo` to benchmark on your machine
 
 ### Model Size
-- Logistic Regression (Iris): ~48 bytes
-- Decision Tree (Iris): ~64 bytes
-- kNN (Iris): ~96 bytes
-- CNN (MNIST): ~100KB
+- Serialized models are a few hundred bytes for Iris-scale classifiers (`*.bin`, quantization gives a 4x float32→int8 reduction)
 
 ## Testing
 

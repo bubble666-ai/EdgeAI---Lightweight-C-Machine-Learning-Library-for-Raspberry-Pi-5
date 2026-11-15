@@ -10,6 +10,8 @@
 #include <cassert>
 #include <chrono>
 
+using namespace edge_ai;
+
 class TestAlgorithms {
 public:
     TestAlgorithms() {}
@@ -122,7 +124,8 @@ private:
 
         edge_ai::CNNConfig config;
         config.conv_layers.push_back({3, 8, 3, 1, 0});
-        config.dense_layers.push_back({8 * 28 * 28, 10});
+        config.dense_layers.push_back({8 * 13 * 13, 32});
+        config.dense_layers.push_back({32, 10});
 
         auto model = std::make_unique<edge_ai::CNN>(config);
 

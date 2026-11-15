@@ -10,6 +10,8 @@
 #include "src/utils/model_factory.h"
 #include "src/utils/quantization.h"
 
+using namespace edge_ai;
+
 void test_basic_functionality() {
     std::cout << "=== Testing Basic Functionality ===" << std::endl;
 

@@ -62,13 +62,13 @@ public:
 
 private:
     CNNConfig config_;
-    std::vector<std::vector<float>> weights_;
-    std::vector<std::vector<float>> biases_;
-    std::vector<std::vector<std::vector<float>>> training_data_;
+    std::vector<std::vector<std::vector<float>>> weights_;      // [dense_layer][row][col]
+    std::vector<std::vector<float>> biases_;                    // [dense_layer][neuron]
+    std::vector<std::vector<std::vector<std::vector<float>>>> training_data_;  // [sample][ch][h][w]
     std::vector<int> training_labels_;
 
-    std::vector<std::vector<std::vector<float>>> weights_3d_;
-    std::vector<std::vector<std::vector<float>>> biases_3d_;
+    std::vector<std::vector<std::vector<std::vector<std::vector<float>>>>> weights_3d_;  // [conv_layer][out_ch][in_ch][kh][kw]
+    std::vector<std::vector<std::vector<float>>> biases_3d_;                // [conv_layer][out_ch]
 
     int input_height_;
     int input_width_;
@@ -76,29 +76,29 @@ private:
 
     void initialize_parameters();
     std::vector<std::vector<std::vector<float>>>
-        conv2d_forward(const std::vector<std::vector<std::vector<float>>& input,
-                      const std::vector<std::vector<std::vector<float>>& kernel,
+        conv2d_forward(const std::vector<std::vector<std::vector<float>>>& input,
+                      const std::vector<std::vector<std::vector<std::vector<float>>>>& kernel,
                       const std::vector<std::vector<float>>& bias,
                       int stride, int padding);
     std::vector<std::vector<float>>
-        max_pool2d_forward(const std::vector<std::vector<std::vector<float>>& input,
+        max_pool2d_forward(const std::vector<std::vector<std::vector<float>>>& input,
                          int pool_size, int stride);
     std::vector<std::vector<float>>
         dense_forward(const std::vector<std::vector<float>>& input,
                      const std::vector<std::vector<float>>& weights,
                      const std::vector<float>& bias);
     std::vector<std::vector<std::vector<float>>>
-        conv2d_backward(const std::vector<std::vector<std::vector<float>>& input,
-                       const std::vector<std::vector<std::vector<float>>& kernel,
+        conv2d_backward(const std::vector<std::vector<std::vector<float>>>& input,
+                       const std::vector<std::vector<std::vector<float>>>& kernel,
                        int stride, int padding);
     std::vector<std::vector<float>>
-        max_pool2d_backward(const std::vector<std::vector<std::vector<float>>& input,
+        max_pool2d_backward(const std::vector<std::vector<std::vector<float>>>& input,
                           const std::vector<std::vector<float>>& mask,
                           int pool_size, int stride);
-    std::vector<std::vector<float>>
-        dense_backward(const std::vector<std::vector<float>>& input,
+    std::vector<float>
+        dense_backward(const std::vector<float>& input,
                       const std::vector<std::vector<float>>& weights);
-    void update_parameters_conv2d(const std::vector<std::vector<std::vector<float>>& grad_weights,
+    void update_parameters_conv2d(const std::vector<std::vector<std::vector<float>>>& grad_weights,
                                 const std::vector<std::vector<float>>& grad_bias,
                                 const TrainingConfig& config);
     void update_parameters_dense(const std::vector<std::vector<float>>& grad_weights,

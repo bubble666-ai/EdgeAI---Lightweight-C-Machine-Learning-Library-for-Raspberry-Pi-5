@@ -1,5 +1,7 @@
 #include "decision_tree.h"
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <queue>
 
@@ -353,8 +355,24 @@ std::vector<float> DecisionTree::get_weights() const {
 }
 
 void DecisionTree::set_weights(const std::vector<float>& weights) {
-    weights_.resize(weights.size());
-    std::copy(weights.begin(), weights.end(), weights_.begin());
+    // The tree stores its "weights" as nodes, not a flat vector. Round-trip
+    // through the binary serialization format: temp file -> load_model.
+    std::filesystem::path tmp = std::filesystem::temp_directory_path() /
+        ("edgeai_tree_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".bin");
+    {
+        std::ofstream file(tmp, std::ios::binary);
+        if (!file) return;
+        file.write(reinterpret_cast<const char*>(&max_depth_), sizeof(max_depth_));
+        file.write(reinterpret_cast<const char*>(&min_samples_split_), sizeof(min_samples_split_));
+        file.write(reinterpret_cast<const char*>(&quantized_), sizeof(quantized_));
+        if (quantized_) {
+            file.write(reinterpret_cast<const char*>(&quant_config_.scale), sizeof(quant_config_.scale));
+            file.write(reinterpret_cast<const char*>(&quant_config_.zero_point), sizeof(quant_config_.zero_point));
+        }
+        file.write(reinterpret_cast<const char*>(weights.data()), static_cast<std::streamsize>(weights.size() * sizeof(float)));
+    }
+    load_model(tmp.string());
+    std::filesystem::remove(tmp);
 }
 
 }

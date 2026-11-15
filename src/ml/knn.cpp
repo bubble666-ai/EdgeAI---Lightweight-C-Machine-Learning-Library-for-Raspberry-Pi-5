@@ -88,8 +88,12 @@ std::vector<std::pair<int, float>> KNN::get_k_nearest_neighbors(const std::vecto
 }
 
 int KNN::vote_majority(const std::vector<std::pair<int, float>>& neighbors) {
-    std::vector<int> votes(*std::max_element(neighbors.begin(), neighbors.end(),
-                                            [](const auto& a, const auto& b) { return a.first < b.first; }).first + 1, 0);
+    int max_label = 0;
+    if (!neighbors.empty()) {
+        max_label = std::max_element(neighbors.begin(), neighbors.end(),
+                                     [](const auto& a, const auto& b) { return a.first < b.first; })->first;
+    }
+    std::vector<int> votes(static_cast<size_t>(max_label) + 1, 0);
 
     for (const auto& [label, dist] : neighbors) {
         votes[label]++;

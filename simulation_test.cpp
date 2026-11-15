@@ -3,6 +3,8 @@
 #include <cmath>
 #include <random>
 
+using namespace edge_ai;
+
 // Simulate the key components of EdgeAI without actual compilation
 
 namespace edge_ai {

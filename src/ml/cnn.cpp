@@ -19,21 +19,25 @@ void CNN::initialize_parameters() {
     std::normal_distribution<float> dist(0.0f, 0.01f);
 
     for (const auto& conv_config : config_.conv_layers) {
-        std::vector<std::vector<std::vector<float>>> kernel(conv_config.out_channels,
-                                                          std::vector<std::vector<float>>(
-                                                              conv_config.kernel_size,
-                                                              std::vector<float>(conv_config.kernel_size)));
+        std::vector<std::vector<std::vector<std::vector<float>>>> kernel(
+            conv_config.out_channels,
+            std::vector<std::vector<std::vector<float>>>(
+                conv_config.in_channels,
+                std::vector<std::vector<float>>(
+                    conv_config.kernel_size,
+                    std::vector<float>(conv_config.kernel_size, 0.0f))));
 
         for (int oc = 0; oc < conv_config.out_channels; ++oc) {
-            for (int kh = 0; kh < conv_config.kernel_size; ++kh) {
-                for (int kw = 0; kw < conv_config.kernel_size; ++kw) {
-                    kernel[oc][kh][kw] = dist(gen);
+            for (int ic = 0; ic < conv_config.in_channels; ++ic) {
+                for (int kh = 0; kh < conv_config.kernel_size; ++kh) {
+                    for (int kw = 0; kw < conv_config.kernel_size; ++kw) {
+                        kernel[oc][ic][kh][kw] = dist(gen);
+                    }
                 }
             }
         }
 
-        std::vector<std::vector<float>> bias(conv_config.out_channels,
-                                          std::vector<float>(conv_config.out_channels, 0.0f));
+        std::vector<std::vector<float>> bias(conv_config.out_channels, std::vector<float>(1, 0.0f));
 
         weights_3d_.push_back(kernel);
         biases_3d_.push_back(bias);
@@ -61,17 +65,20 @@ bool CNN::train(const Dataset& data, const TrainingConfig& config) {
         return false;
     }
 
-    input_height_ = 32;
-    input_width_ = 32;
-    input_channels_ = 3;
+    // Derive input geometry from the dataset: row length = C*H*W, H=W assumed square.
+    input_channels_ = config_.conv_layers.empty() ? 1 : config_.conv_layers[0].in_channels;
+    int pixels_per_sample = static_cast<int>(data.X[0].size());
+    input_height_ = static_cast<int>(std::sqrt(pixels_per_sample / input_channels_));
+    input_width_ = input_height_;
 
     training_data_.resize(data.num_samples);
     training_labels_.resize(data.num_samples);
 
     for (int i = 0; i < data.num_samples; ++i) {
-        training_data_[i] = std::vector<std::vector<float>>(
+        training_data_[i] = std::vector<std::vector<std::vector<float>>>(
             input_channels_,
-            std::vector<float>(input_height_ * input_width_));
+            std::vector<std::vector<float>>(input_height_,
+                                            std::vector<float>(input_width_, 0.0f)));
         training_labels_[i] = data.y[i];
 
         for (int c = 0; c < input_channels_; ++c) {
@@ -79,7 +86,7 @@ bool CNN::train(const Dataset& data, const TrainingConfig& config) {
                 for (int w = 0; w < input_width_; ++w) {
                     int idx = c * input_height_ * input_width_ + h * input_width_ + w;
                     if (idx < data.X[i].size()) {
-                        training_data_[i][c][h * input_width_ + w] = data.X[i][idx];
+                        training_data_[i][c][h][w] = data.X[i][idx];
                     }
                 }
             }
@@ -95,8 +102,10 @@ bool CNN::train(const Dataset& data, const TrainingConfig& config) {
 
             auto relu1_output = conv1_output;
             for (auto& channel : relu1_output) {
-                for (auto& val : channel) {
-                    val = relu(val);
+                for (auto& row : channel) {
+                    for (auto& val : row) {
+                        val = relu(val);
+                    }
                 }
             }
 
@@ -192,26 +201,26 @@ bool CNN::train(const Dataset& data, const TrainingConfig& config) {
 }
 
 std::vector<std::vector<std::vector<float>>>
-CNN::conv2d_forward(const std::vector<std::vector<std::vector<float>>& input,
-                    const std::vector<std::vector<std::vector<float>>& kernel,
+CNN::conv2d_forward(const std::vector<std::vector<std::vector<float>>>& input,
+                    const std::vector<std::vector<std::vector<std::vector<float>>>>& kernel,
                     const std::vector<std::vector<float>>& bias,
                     int stride, int padding) {
-    int batch_size = input.size();
-    int in_channels = input[0].size();
-    int in_height = input[0][0].size();
+    int in_channels = input.size();
+    int in_height = input[0].size();
     int in_width = input[0][0].size();
     int out_channels = kernel.size();
-    int kernel_size = kernel[0].size();
+    int kernel_size = kernel[0][0].size();
 
     int out_height = (in_height + 2 * padding - kernel_size) / stride + 1;
     int out_width = (in_width + 2 * padding - kernel_size) / stride + 1;
 
-    std::vector<std::vector<std::vector<float>>> output(batch_size,
+    // output is (C, H, W) for a single-volume conv
+    std::vector<std::vector<std::vector<float>>> output(out_channels,
                                                        std::vector<std::vector<float>>(
-                                                           out_channels,
-                                                           std::vector<float>(out_height * out_width)));
+                                                           out_height,
+                                                           std::vector<float>(out_width)));
 
-    for (int b = 0; b < batch_size; ++b) {
+    {
         for (int oc = 0; oc < out_channels; ++oc) {
             for (int oh = 0; oh < out_height; ++oh) {
                 for (int ow = 0; ow < out_width; ++ow) {
@@ -222,12 +231,12 @@ CNN::conv2d_forward(const std::vector<std::vector<std::vector<float>>& input,
                                 int ih = oh * stride - padding + kh;
                                 int iw = ow * stride - padding + kw;
                                 if (ih >= 0 && ih < in_height && iw >= 0 && iw < in_width) {
-                                    sum += input[b][ic][ih * in_width + iw] * kernel[oc][ic][kh * kernel_size + kw];
+                                    sum += input[ic][ih][iw] * kernel[oc][ic][kh][kw];
                                 }
                             }
                         }
                     }
-                    output[b][oc][oh * out_width + ow] = sum + bias[oc][0];
+                    output[oc][oh][ow] = sum + bias[oc][0];
                 }
             }
         }
@@ -237,37 +246,33 @@ CNN::conv2d_forward(const std::vector<std::vector<std::vector<float>>& input,
 }
 
 std::vector<std::vector<float>>
-CNN::max_pool2d_forward(const std::vector<std::vector<std::vector<float>>& input,
+CNN::max_pool2d_forward(const std::vector<std::vector<std::vector<float>>>& input,
                         int pool_size, int stride) {
-    int batch_size = input.size();
-    int channels = input[0].size();
-    int in_height = input[0][0].size();
-    int in_width = static_cast<int>(std::sqrt(in_height));
+    int channels = input.size();
+    int in_height = input[0].size();
+    int in_width = input[0][0].size();
 
     int out_height = (in_height - pool_size) / stride + 1;
     int out_width = (in_width - pool_size) / stride + 1;
 
-    std::vector<std::vector<float>> output(batch_size,
-                                          std::vector<float>(channels * out_height * out_width));
+    // output is (C, out_h*out_w) for a single-volume pool
+    std::vector<std::vector<float>> output(channels,
+                                          std::vector<float>(out_height * out_width));
 
-    for (int b = 0; b < batch_size; ++b) {
-        for (int c = 0; c < channels; ++c) {
-            for (int oh = 0; oh < out_height; ++oh) {
-                for (int ow = 0; ow < out_width; ++ow) {
-                    float max_val = -std::numeric_limits<float>::max();
-                    for (int ph = 0; ph < pool_size; ++ph) {
-                        for (int pw = 0; pw < pool_size; ++pw) {
-                            int ih = oh * stride + ph;
-                            int iw = ow * stride + pw;
-                            if (ih < in_height && iw < in_width) {
-                                int idx = ih * in_width + iw;
-                                max_val = std::max(max_val, input[b][c][idx]);
-                            }
+    for (int c = 0; c < channels; ++c) {
+        for (int oh = 0; oh < out_height; ++oh) {
+            for (int ow = 0; ow < out_width; ++ow) {
+                float max_val = -std::numeric_limits<float>::max();
+                for (int ph = 0; ph < pool_size; ++ph) {
+                    for (int pw = 0; pw < pool_size; ++pw) {
+                        int ih = oh * stride + ph;
+                        int iw = ow * stride + pw;
+                        if (ih < in_height && iw < in_width) {
+                            max_val = std::max(max_val, input[c][ih][iw]);
                         }
                     }
-                    int out_idx = c * out_height * out_width + oh * out_width + ow;
-                    output[b][out_idx] = max_val;
                 }
+                output[c][oh * out_width + ow] = max_val;
             }
         }
     }
@@ -291,48 +296,53 @@ CNN::dense_forward(const std::vector<std::vector<float>>& input,
     return output;
 }
 
-std::vector<std::vector<float>>
-CNN::conv2d_backward(const std::vector<std::vector<std::vector<float>>& input,
-                     const std::vector<std::vector<std::vector<float>>& kernel,
+std::vector<std::vector<std::vector<float>>>
+CNN::conv2d_backward(const std::vector<std::vector<std::vector<float>>>& input,
+                     const std::vector<std::vector<std::vector<float>>>& kernel,
                      int stride, int padding) {
     return std::vector<std::vector<std::vector<float>>>(input.size());
 }
 
 std::vector<std::vector<float>>
-CNN::max_pool2d_backward(const std::vector<std::vector<std::vector<float>>& input,
+CNN::max_pool2d_backward(const std::vector<std::vector<std::vector<float>>>& input,
                         const std::vector<std::vector<float>>& mask,
                         int pool_size, int stride) {
     return std::vector<std::vector<float>>(input.size());
 }
 
-std::vector<std::vector<float>>
-CNN::dense_backward(const std::vector<std::vector<float>>& input,
+std::vector<float>
+CNN::dense_backward(const std::vector<float>& input,
                    const std::vector<std::vector<float>>& weights) {
-    std::vector<std::vector<float>> grad_input(1, std::vector<float>(weights[0].size(), 0.0f));
+    std::vector<float> grad_input(weights[0].size(), 0.0f);
 
     for (size_t i = 0; i < weights.size(); ++i) {
         for (size_t j = 0; j < weights[0].size(); ++j) {
-            grad_input[0][j] += input[0][i] * weights[i][j];
+            grad_input[j] += input[i] * weights[i][j];
         }
     }
 
     return grad_input;
 }
 
-void CNN::update_parameters_conv2d(const std::vector<std::vector<std::vector<float>>& grad_weights,
+void CNN::update_parameters_conv2d(const std::vector<std::vector<std::vector<float>>>& grad_weights,
                                    const std::vector<std::vector<float>>& grad_bias,
                                    const TrainingConfig& config) {
     for (size_t i = 0; i < grad_weights.size(); ++i) {
-        for (size_t j = 0; j < grad_weights[i].size(); ++j) {
-            for (size_t k = 0; k < grad_weights[i][j].size(); ++k) {
-                weights_3d_[i][j][k] -= config.learning_rate * grad_weights[i][j][k];
+        for (size_t j = 0; j < grad_weights[i].size() && j < weights_3d_[i].size(); ++j) {
+            size_t flat = 0;
+            for (size_t ic = 0; ic < weights_3d_[i][j].size() && flat < grad_weights[i][j].size(); ++ic) {
+                for (size_t kh = 0; kh < weights_3d_[i][j][ic].size() && flat < grad_weights[i][j].size(); ++kh) {
+                    for (size_t kw = 0; kw < weights_3d_[i][j][ic][kh].size() && flat < grad_weights[i][j].size(); ++kw) {
+                        weights_3d_[i][j][ic][kh][kw] -= config.learning_rate * grad_weights[i][j][flat++];
+                    }
+                }
             }
         }
     }
 
     for (size_t i = 0; i < grad_bias.size(); ++i) {
         for (size_t j = 0; j < grad_bias[i].size(); ++j) {
-            biases_3d_[i][i][j] -= config.learning_rate * grad_bias[i][j];
+            biases_3d_[i][j][0] -= config.learning_rate * grad_bias[i][j];
         }
     }
 }
@@ -361,20 +371,21 @@ float CNN::calculate_loss(const std::vector<std::vector<float>>& predictions,
 }
 
 std::vector<int> CNN::predict(const std::vector<std::vector<float>>& data) {
-    std::vector<std::vector<std::vector<float>>> input(data.size());
+    std::vector<std::vector<std::vector<std::vector<float>>>> input(data.size());
     std::vector<int> predictions(data.size());
 
     for (size_t i = 0; i < data.size(); ++i) {
-        input[i] = std::vector<std::vector<float>>(
+        input[i] = std::vector<std::vector<std::vector<float>>>(
             input_channels_,
-            std::vector<float>(input_height_ * input_width_));
+            std::vector<std::vector<float>>(input_height_,
+                                            std::vector<float>(input_width_, 0.0f)));
 
         for (int c = 0; c < input_channels_; ++c) {
             for (int h = 0; h < input_height_; ++h) {
                 for (int w = 0; w < input_width_; ++w) {
                     int idx = c * input_height_ * input_width_ + h * input_width_ + w;
                     if (idx < data[i].size()) {
-                        input[i][c][h * input_width_ + w] = data[i][idx];
+                        input[i][c][h][w] = data[i][idx];
                     }
                 }
             }
@@ -385,8 +396,10 @@ std::vector<int> CNN::predict(const std::vector<std::vector<float>>& data) {
 
         auto relu1_output = conv1_output;
         for (auto& channel : relu1_output) {
-            for (auto& val : channel) {
-                val = relu(val);
+            for (auto& row : channel) {
+                for (auto& val : row) {
+                    val = relu(val);
+                }
             }
         }
 
@@ -564,10 +577,14 @@ bool CNN::load_model(const std::string& filepath) {
 std::vector<float> CNN::get_weights() const {
     std::vector<float> flat_weights;
 
-    for (const auto& kernel : weights_3d_) {
-        for (const auto& channel : kernel) {
-            for (float val : channel) {
-                flat_weights.push_back(val);
+    for (const auto& kernel_layer : weights_3d_) {
+        for (const auto& out_ch : kernel_layer) {
+            for (const auto& in_ch : out_ch) {
+                for (const auto& row : in_ch) {
+                    for (float val : row) {
+                        flat_weights.push_back(val);
+                    }
+                }
             }
         }
     }
@@ -586,10 +603,14 @@ std::vector<float> CNN::get_weights() const {
 void CNN::set_weights(const std::vector<float>& weights) {
     size_t pos = 0;
 
-    for (auto& kernel : weights_3d_) {
-        for (auto& channel : kernel) {
-            for (auto& val : channel) {
-                val = weights[pos++];
+    for (auto& kernel_layer : weights_3d_) {
+        for (auto& out_ch : kernel_layer) {
+            for (auto& in_ch : out_ch) {
+                for (auto& row : in_ch) {
+                    for (auto& val : row) {
+                        val = weights[pos++];
+                    }
+                }
             }
         }
     }

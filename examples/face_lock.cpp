@@ -7,6 +7,8 @@
 #include <thread>
 #include <wiringPi.h>
 
+using namespace edge_ai;
+
 class FaceLockSystem {
 public:
     FaceLockSystem() {
